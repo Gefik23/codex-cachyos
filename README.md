@@ -8,7 +8,7 @@ The upstream wrapper's MIT license and authorship are preserved.
 
 For the packaged x86_64 build, open this repository's
 [Releases](https://github.com/Gefik23/codex-cachyos/releases). Download the
-`.pkg.tar.zst` asset, then run `sudo pacman -U ./codex-desktop-26.1007.21434-1-x86_64.pkg.tar.zst`
+`.pkg.tar.zst` asset, then run `sudo pacman -U /path/to/the-downloaded.pkg.tar.zst`
 and `codex-desktop`. The desktop menu name is **ChatGPT Community**.
 GeoHide-enabled packages also provide `codex-desktop-geohide` and a separate
 menu entry. Use `codex-desktop-geohide --check` before launching. It uses private
