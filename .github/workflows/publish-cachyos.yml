@@ -17,8 +17,6 @@ jobs:
     env:
       RELEASE_TAG: v26.1007.21434-1
       UPSTREAM_VERSION: 26.1007.21434
-      PACKAGE_WITH_UPDATER: '0'
-      MAX_BUILD_THREADS: '4'
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
         with:
@@ -47,12 +45,15 @@ jobs:
             python3 - <<'PY'
           import os, pathlib
           lines = (pathlib.Path(os.environ['RUNNER_TEMP']) / 'cachyos-tests.log').read_text().splitlines()
-          message = '\n'.join(lines[-120:])[-20000:].replace('%', '%25').replace('\r', '%0D').replace('\n', '%0A')
+          message = '\n'.join(lines[-120:])[-3500:].replace('%', '%25').replace('\r', '%0D').replace('\n', '%0A')
           print('::error title=Codex test failure::' + message)
           PY
             exit "$result"
           fi
       - name: Verify and build the pinned upstream release
+        env:
+          PACKAGE_WITH_UPDATER: '0'
+          MAX_BUILD_THREADS: '4'
         run: |
           node scripts/lib/upstream-linux-package.js --output-dir "$RUNNER_TEMP/codex-source" --metadata "$RUNNER_TEMP/codex-source/verified-package.json" --key-base64 assets/openai-codex-linux-repository-key.gpg.base64
           node -e 'const fs=require("fs"); const m=JSON.parse(fs.readFileSync(process.env.RUNNER_TEMP+"/codex-source/verified-package.json")); if(m.version!==process.env.UPSTREAM_VERSION) throw new Error("The signed stable release changed; rebuild must be reviewed before publishing");'
