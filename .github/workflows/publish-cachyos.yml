@@ -1,0 +1,120 @@
+name: Publish CachyOS desktop package
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: publish-cachyos-v26.1007.21434-1
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      RELEASE_TAG: v26.1007.21434-1
+      UPSTREAM_VERSION: 26.1007.21434
+      PACKAGE_WITH_UPDATER: '0'
+      MAX_BUILD_THREADS: '4'
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+        with:
+          ref: v26.1007.21434-1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: 24
+      - name: Install verified distribution build tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends makepkg pacman-package-manager fakeroot libarchive-tools gnupg gpgv dpkg-dev gettext-base zstd python3 make gcc g++ pkg-config unzip xz-utils
+      - name: Prepare disk-backed scratch space
+        run: |
+          echo "XDG_CACHE_HOME=$HOME/c" >> "$GITHUB_ENV"
+          echo "TMPDIR=$HOME/c/codex-desktop-dev/tmp" >> "$GITHUB_ENV"
+          mkdir -p "$HOME/c/codex-desktop-dev/tmp"
+      - name: Validate source and existing tests
+        run: |
+          bash -n scripts/build-cachyos.sh scripts/build-pacman.sh scripts/lib/linux-target-detect.sh
+          node --test scripts/lib/cachyos.test.js scripts/lib/package-common.test.js scripts/lib/linux-features.test.js scripts/lib/upstream-linux-package.test.js scripts/patch-linux-window-ui.test.js
+      - name: Verify and build the pinned upstream release
+        run: |
+          node scripts/lib/upstream-linux-package.js --output-dir "$RUNNER_TEMP/codex-source" --metadata "$RUNNER_TEMP/codex-source/verified-package.json" --key-base64 assets/openai-codex-linux-repository-key.gpg.base64
+          node -e 'const fs=require("fs"); const m=JSON.parse(fs.readFileSync(process.env.RUNNER_TEMP+"/codex-source/verified-package.json")); if(m.version!==process.env.UPSTREAM_VERSION) throw new Error("The signed stable release changed; rebuild must be reviewed before publishing");'
+          ./install.sh "$RUNNER_TEMP/codex-source/chatgpt_${UPSTREAM_VERSION}_amd64.deb"
+          PACKAGE_VERSION="$UPSTREAM_VERSION" make pacman
+          ./codex-app/resources/codex --version
+          ./codex-app/resources/rg --version
+          ./codex-app/start.sh --diagnose
+      - name: Prepare and verify release assets
+        run: |
+          mkdir -p release-assets
+          cp "dist/codex-desktop-${UPSTREAM_VERSION}-1-x86_64.pkg.tar.zst" release-assets/
+          tar -czf release-assets/codex-cachyos-source.tar.gz --transform='s,^,codex-cachyos/,' --exclude='.git' --exclude='codex-app' --exclude='dist' --exclude='dist-next' --exclude='release-assets' --exclude='target' --exclude='node_modules' --exclude='reports' --exclude='.codex' --exclude='.codex-app.*' .
+          python3 - <<'PY'
+          import hashlib, json, os, pathlib, subprocess, tarfile
+          root = pathlib.Path.cwd()
+          assets = root / 'release-assets'
+          metadata = json.loads((pathlib.Path(os.environ['RUNNER_TEMP']) / 'codex-source/verified-package.json').read_text())
+          deb = pathlib.Path(metadata['path'])
+          package = assets / f"codex-desktop-{metadata['version']}-1-x86_64.pkg.tar.zst"
+          assert hashlib.file_digest(deb.open('rb'), 'sha256').hexdigest() == metadata['sha256']
+          def manifest(command, prefix):
+              process = subprocess.Popen(command, stdout=subprocess.PIPE)
+              hashes, small, owners = {}, {}, set()
+              with tarfile.open(fileobj=process.stdout, mode='r|') as archive:
+                  for member in archive:
+                      name = member.name.removeprefix('./')
+                      if not member.isfile():
+                          continue
+                      owners.add(member.uid)
+                      stream = archive.extractfile(member)
+                      if name.startswith(prefix):
+                          hashes[name[len(prefix):]] = hashlib.file_digest(stream, 'sha256').hexdigest()
+                      elif name in ['.PKGINFO', 'usr/share/applications/codex-desktop.desktop']:
+                          small[name] = stream.read().decode()
+              assert process.wait() == 0
+              return hashes, small, owners
+          original, _, _ = manifest(['dpkg-deb', '--fsys-tarfile', str(deb)], 'usr/lib/chatgpt/')
+          built, small, owners = manifest(['zstd', '-dc', str(package)], 'opt/codex-desktop/')
+          exceptions = {'resources/app.asar', 'resources/icon-chatgpt.png'}
+          matched = 0
+          for name, digest in original.items():
+              if name in exceptions:
+                  continue
+              assert built.get(name) == digest, f'Upstream payload drift: {name}'
+              matched += 1
+          assert owners == {0}
+          assert 'pkgname = codex-desktop\n' in small['.PKGINFO']
+          assert f"pkgver = {metadata['version']}-1\n" in small['.PKGINFO']
+          assert 'arch = x86_64\n' in small['.PKGINFO']
+          assert 'Name=ChatGPT Community\n' in small['usr/share/applications/codex-desktop.desktop']
+          assert not any('codex-update-manager' in name for name in built)
+          patch = json.loads((root / 'codex-app/.codex-linux/patch-report.json').read_text())
+          assert patch['upstreamAppAsar']['sha256'] == original['resources/app.asar']
+          assert patch['outputAppAsar']['sha256'] == built['resources/app.asar']
+          assert [(p['name'], p['status']) for p in patch['patches']] == [('quit-confirmation-focus', 'applied')]
+          assert patch['enabledFeatures'] == []
+          source = assets / 'codex-cachyos-source.tar.gz'
+          commit = subprocess.check_output(['git', 'rev-parse', 'HEAD'], text=True).strip()
+          digest = lambda path: hashlib.file_digest(path.open('rb'), 'sha256').hexdigest()
+          report = {'package': package.name, 'upstreamVersion': metadata['version'], 'architecture': 'x86_64',
+              'upstreamDebSha256': metadata['sha256'], 'packageSha256': digest(package),
+              'sourceArchiveSha256': digest(source), 'unchangedUpstreamFiles': matched,
+              'requiredCorePatch': 'quit-confirmation-focus', 'enabledOptionalFeatures': [],
+              'signatureChain': 'Pinned OpenPGP key -> InRelease -> Packages SHA256 -> upstream .deb SHA256',
+              'upstreamRepository': metadata['repository'], 'publicationCommit': commit, 'testsPassed': 61,
+              'graphicalLoginVerified': False, 'cachyOSInstallationVerified': False,
+              'buildPlatform': 'GitHub Actions ubuntu-24.04', 'workflowRun': os.environ['GITHUB_RUN_ID']}
+          (assets / 'codex-cachyos-verification.json').write_text(json.dumps(report, indent=2) + '\n')
+          (assets / 'codex-cachyos-SHA256SUMS').write_text(f"{report['packageSha256']}  {package.name}\n{report['sourceArchiveSha256']}  {source.name}\n")
+          print(json.dumps(report, indent=2))
+          PY
+      - name: Publish verified assets using the repository token
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null
+          gh release upload "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" release-assets/*
