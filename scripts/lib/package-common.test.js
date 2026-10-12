@@ -28,7 +28,7 @@ function copyFeatureHelpers(sourceRoot, targetRoot) {
 
 for (const [fileMode, directoryMode] of [[0o644, 0o755], [0o600, 0o700], [0o755, 0o755]]) {
   test(`package permission restoration traverses directory resources with mode ${fileMode.toString(8)}`, (t) => {
-    const base = path.join(os.homedir(), ".cache/codex-desktop-dev");
+    const base = path.join(process.env.XDG_CACHE_HOME || path.join(os.homedir(), ".cache"), "codex-desktop-dev");
     fs.mkdirSync(base, { recursive: true });
     const root = fs.mkdtempSync(path.join(base, "codex-package-directory-mode-"));
     t.after(() => fs.rmSync(root, { recursive: true, force: true }));

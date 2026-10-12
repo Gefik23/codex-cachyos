@@ -200,10 +200,10 @@ main() {
 	mkdir -p "$DIST_DIR"
 	info "Building ${PACKAGE_NAME}-${PACMAN_PKGVER}-${PACMAN_PKGREL}-${arch}.pkg.tar.zst"
 
-	# Build the package; --nodeps skips dependency checks at build time (they
-	# are enforced by pacman at install time), and --skipinteg is needed
-	# because we have no remote sources to verify.
-	(cd "$build_root" && env "${makepkg_env[@]}" makepkg -f --nodeps --skipinteg 2>&1) >&2
+	# Runtime dependencies are enforced by pacman on the target host. The
+	# verified upstream payload is staged locally; keep makepkg's normal source
+	# integrity checks enabled even though this PKGBUILD has no remote sources.
+	(cd "$build_root" && env "${makepkg_env[@]}" makepkg -f --nodeps 2>&1) >&2
 
 	local pkg_file=""
 	pkg_file="$(find "$DIST_DIR" \( -name "${PACKAGE_NAME}-${PACMAN_PKGVER}-*.pkg.tar.zst" \

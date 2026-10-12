@@ -77,7 +77,7 @@ detect_package_manager() {
         echo "emerge"
     elif os_release_matches debian ubuntu linuxmint pop elementary zorin && command -v apt-get >/dev/null 2>&1; then
         echo "apt"
-    elif os_release_matches arch archlinux manjaro endeavouros artix && command -v pacman >/dev/null 2>&1; then
+    elif os_release_matches arch archlinux cachyos manjaro endeavouros artix && command -v pacman >/dev/null 2>&1; then
         echo "pacman"
     elif os_release_matches opensuse suse sles && command -v zypper >/dev/null 2>&1; then
         echo "zypper"
@@ -113,7 +113,7 @@ detect_package_manager() {
 detect_package_format() {
     if os_release_matches gentoo; then
         echo "ebuild"
-    elif os_release_matches arch archlinux manjaro endeavouros artix; then
+    elif os_release_matches arch archlinux cachyos manjaro endeavouros artix; then
         echo "pacman"
     elif os_release_matches fedora rhel centos rocky almalinux ol sles suse opensuse; then
         echo "rpm"

@@ -37,6 +37,13 @@ metadata 均被直接复用。默认构建仅对 `resources/app.asar` 应用必�
 参与贡献前请阅读 [CONTRIBUTING.md](CONTRIBUTING.md)。维护者和 coding agent
 还应阅读 [AGENTS.md](AGENTS.md)。
 
+## CachyOS / Arch 版本
+
+此版本增加了 CachyOS 检测和手动更新的 pacman 构建入口，保留上游 MIT
+许可证和作者署名。x86_64 软件包将在本仓库的
+[Releases](https://github.com/Gefik23/codex-cachyos/releases) 中提供；
+构建及验证范围见[俄语指南](docs/CACHYOS.md)。
+
 ## 安装
 
 构建原生软件包或 AppImage 前先克隆仓库：
@@ -53,6 +60,7 @@ cd codex-desktop-linux
 | Fedora | `make bootstrap-native` | 构建并安装 RPM |
 | openSUSE | `make bootstrap-native` | 构建并安装 RPM |
 | Arch、Manjaro、EndeavourOS | `make bootstrap-native` | 构建并安装 pacman 软件包 |
+| CachyOS / Arch，手动更新 | `bash scripts/build-cachyos.sh` | 仅构建 pacman 包，不安装；[俄语指南](docs/CACHYOS.md) |
 | Gentoo | `make bootstrap-native` | 构建本地 ebuild 并通过 Portage 安装；支持 `ui-tweaks`，不含更新器 |
 | NixOS 或其他 Nix 系统 | `nix run github:ilysenko/codex-desktop-linux` | 构建并运行 flake；参阅 [Nix](docs/nix.md) |
 | Atomic 桌面或其他发行版 | `make build-app && make appimage` | 生成不含原生更新器的本地 AppImage |

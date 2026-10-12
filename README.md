@@ -1,5 +1,20 @@
 <h1 align="center">ChatGPT Community for Linux</h1>
 
+## CachyOS / Arch edition
+
+This checkout adds explicit CachyOS detection and a manual-update pacman build
+to [ilysenko/codex-desktop-linux](https://github.com/ilysenko/codex-desktop-linux).
+The upstream wrapper's MIT license and authorship are preserved.
+
+For the packaged x86_64 build, open this repository's
+[Releases](https://github.com/Gefik23/codex-cachyos/releases). Download the
+`.pkg.tar.zst` asset, then run `sudo pacman -U ./codex-desktop-26.1007.21434-1-x86_64.pkg.tar.zst`
+and `codex-desktop`. The desktop menu name is **ChatGPT Community**.
+See the [Russian CachyOS guide](docs/CACHYOS.md) for building, Wayland, and
+validation limits. Graphical login and a real CachyOS installation remain unverified.
+
+The original community project documentation follows.
+
 <p align="center">
   <a href="https://github.com/ilysenko/codex-desktop-linux/actions/workflows/ci.yml"><img src="https://github.com/ilysenko/codex-desktop-linux/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
   <a href="https://github.com/ilysenko/codex-desktop-linux/actions/workflows/upstream-build-app.yml"><img src="https://github.com/ilysenko/codex-desktop-linux/actions/workflows/upstream-build-app.yml/badge.svg" alt="Official Linux package build"></a>
@@ -57,6 +72,7 @@ cd codex-desktop-linux
 | Fedora | `make bootstrap-native` | Builds and installs an RPM |
 | openSUSE | `make bootstrap-native` | Builds and installs an RPM |
 | Arch, Manjaro, EndeavourOS | `make bootstrap-native` | Builds and installs a pacman package |
+| CachyOS / Arch, manual updates | `bash scripts/build-cachyos.sh` | Builds a pacman package without installing; [Russian guide](docs/CACHYOS.md) |
 | Gentoo | `make bootstrap-native` | Builds a local ebuild and installs through Portage; supports `ui-tweaks`, no updater |
 | NixOS or another Nix system | `nix run github:ilysenko/codex-desktop-linux` | Builds and runs the flake output; see [Nix](docs/nix.md) |
 | Atomic desktops or another distribution | `make build-app && make appimage` | Produces a local AppImage without the native updater |

@@ -6,7 +6,7 @@ const path = require("node:path");
 
 const DEB_IDS = ["debian", "ubuntu", "linuxmint", "pop", "elementary", "zorin"];
 const RPM_IDS = ["fedora", "rhel", "centos", "rocky", "almalinux", "ol", "sles", "suse", "opensuse"];
-const PACMAN_IDS = ["arch", "archlinux", "manjaro", "endeavouros", "artix"];
+const PACMAN_IDS = ["arch", "archlinux", "cachyos", "manjaro", "endeavouros", "artix"];
 
 function trimOsReleaseValue(value) {
   return String(value ?? "").trim().replace(/^["']|["']$/g, "");
