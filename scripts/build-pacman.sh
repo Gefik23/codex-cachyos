@@ -207,8 +207,8 @@ main() {
 	(cd "$build_root" && env "${makepkg_env[@]}" makepkg -f --nodeps 2>&1) >&2
 
 	local pkg_file=""
-	pkg_file="$(find "$DIST_DIR" \( -name "${PACKAGE_NAME}-${PACMAN_PKGVER}-*.pkg.tar.zst" \
-		-o -name "${PACKAGE_NAME}-${PACMAN_PKGVER}-*.pkg.tar.xz" \) \
+	pkg_file="$(find "$DIST_DIR" \( -name "${PACKAGE_NAME}-${PACMAN_PKGVER}-${PACMAN_PKGREL}-${arch}.pkg.tar.zst" \
+		-o -name "${PACKAGE_NAME}-${PACMAN_PKGVER}-${PACMAN_PKGREL}-${arch}.pkg.tar.xz" \) \
 		-print -quit 2>/dev/null || true)"
 	[ -f "$pkg_file" ] || error "makepkg did not produce a package"
 

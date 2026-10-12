@@ -7,7 +7,7 @@ permissions:
   contents: write
 
 concurrency:
-  group: publish-cachyos-v26.1007.21434-2
+  group: publish-cachyos-v26.1007.21434-3
   cancel-in-progress: false
 
 jobs:
@@ -15,13 +15,13 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     env:
-      RELEASE_TAG: v26.1007.21434-2
+      RELEASE_TAG: v26.1007.21434-3
       UPSTREAM_VERSION: 26.1007.21434
-      PACMAN_PACKAGE_RELEASE: '2'
+      PACMAN_PACKAGE_RELEASE: '3'
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
         with:
-          ref: v26.1007.21434-2
+          ref: v26.1007.21434-3
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
         with:
           node-version: 24
@@ -67,6 +67,17 @@ jobs:
           ./codex-app/start.sh --diagnose
       - name: Accept private DNS namespace on the runner
         run: |
+          # Ubuntu 24.04 restricts userns creation through AppArmor. Grant
+          # this capability to bubblewrap only, without disabling AppArmor
+          # or Chromium's sandbox. CachyOS does not need this runner profile.
+          cat > "$RUNNER_TEMP/codex-geohide-bwrap.apparmor" <<'PROFILE'
+          abi <abi/4.0>,
+          include <tunables/global>
+          profile codex-geohide-bwrap /usr/bin/bwrap flags=(unconfined) {
+            userns,
+          }
+          PROFILE
+          sudo apparmor_parser -r "$RUNNER_TEMP/codex-geohide-bwrap.apparmor"
           before="$(sha256sum /etc/resolv.conf /etc/nsswitch.conf)"
           ./codex-app/.codex-linux/features/geohide-dns/launch.sh --region eu --check > "$RUNNER_TEMP/geohide-check.log" 2>&1 || {
             result=$?
