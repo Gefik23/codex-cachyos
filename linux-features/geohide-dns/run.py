@@ -40,6 +40,19 @@ def check():
             print("chatgpt.com: TLS certificate verified", flush=True)
 
 
+def check_devices():
+    # A nodev /dev mount lets DNS work while shell redirects and the Electron
+    # zygote fail. Check this for diagnostics and normal launches alike.
+    with open("/dev/null", "wb", buffering=0) as stream:
+        stream.write(b"GeoHide runtime check")
+    with open("/dev/null", "rb", buffering=0) as stream:
+        if stream.read(1) != b"":
+            raise RuntimeError("/dev/null does not behave as a null device")
+    with open("/dev/urandom", "rb", buffering=0) as stream:
+        if len(stream.read(16)) != 16:
+            raise RuntimeError("/dev/urandom is unavailable")
+
+
 def main(argv):
     if argv[0] == "--prepare":
         prepare(*argv[1:])
@@ -47,8 +60,10 @@ def main(argv):
     if argv[0] != "--run":
         raise ValueError("Unknown mode")
     launcher, diagnostic, region, *arguments = argv[1:]
+    check_devices()
     if diagnostic == "1":
         print(f"GeoHide region: {region}", flush=True)
+        print("Runtime devices: /dev/null and /dev/urandom accessible", flush=True)
         check()
         return
     print(f"Starting ChatGPT Community with private GeoHide DNS ({region})", file=sys.stderr)

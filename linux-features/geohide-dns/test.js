@@ -69,6 +69,7 @@ test("launcher uses private binds, forwards arguments, cleans up, and refuses pr
   const result = spawnSync("bash", [path.join(featureDir, "launch.sh"), "--region", "eu", "codex://test", "two words"], { env, encoding: "utf8" });
   assert.equal(result.status, 0, result.stderr);
   assert.match(result.stdout, /BWRAP:--ro-bind/);
+  assert.match(result.stdout, /BWRAP:--bind\nBWRAP:\/\nBWRAP:\/\nBWRAP:--dev-bind\nBWRAP:\/dev\nBWRAP:\/dev\n/);
   assert.match(result.stdout, /BWRAP:--die-with-parent/);
   assert.match(result.stdout, /ARG:codex:\/\/test\nARG:two words/);
   assert.deepEqual(fs.readFileSync("/etc/resolv.conf"), before);
@@ -77,3 +78,23 @@ test("launcher uses private binds, forwards arguments, cleans up, and refuses pr
   assert.notEqual(bad.status, 0);
   assert.match(bad.stderr, /conflicts with HTTPS_PROXY/);
 }));
+
+test("runtime preflight rejects inaccessible devices before executing the app", () => {
+  const code = `
+import sys
+from unittest.mock import patch
+sys.path.insert(0, sys.argv[1])
+import run
+with patch('builtins.open', side_effect=PermissionError('/dev/null: permission denied')):
+    with patch('os.execv') as launch:
+        try:
+            run.main(['--run', '/app/start.sh', '0', 'ru'])
+        except PermissionError:
+            pass
+        else:
+            raise AssertionError('Device failure was ignored')
+        launch.assert_not_called()
+`;
+  const result = spawnSync("python3", ["-c", code, feature], { encoding: "utf8" });
+  assert.equal(result.status, 0, result.stderr);
+});

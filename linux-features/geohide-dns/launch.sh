@@ -45,7 +45,9 @@ resolv_target="$(readlink -f /etc/resolv.conf)"
 [ -f "$resolv_target" ] || { printf 'System resolv.conf is missing.\n' >&2; exit 1; }
 # Mounts are visible only inside this process tree. nss-resolve must not send
 # child lookups to the host systemd-resolved service over D-Bus.
-bwrap --bind / / --ro-bind "$scratch/resolv.conf" "$resolv_target" \
+# Ordinary bind mounts can be nodev; explicitly retain access to /dev/null,
+# random devices, shared memory, and GPU devices in the private namespace.
+bwrap --bind / / --dev-bind /dev /dev --ro-bind "$scratch/resolv.conf" "$resolv_target" \
     --ro-bind "$scratch/nsswitch.conf" /etc/nsswitch.conf --die-with-parent \
     -- python3 "$feature_dir/run.py" --run "$app_dir/start.sh" "$check" "$region" "$@" &
 child=$!

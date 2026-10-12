@@ -39,6 +39,9 @@ network processes, and the bundled native Codex inherit the namespace. The
 original executable, bundled binaries, and ASAR are unchanged by this feature.
 System files are never written. Temporary files are removed when the launcher
 exits; the bubblewrap process dies with its parent.
+The host's `/dev` is explicitly device-bound so `/dev/null`, random devices,
+shared memory and GPU nodes remain accessible with the user's normal permissions.
+Every launch checks `/dev/null` and `/dev/urandom` before starting Electron.
 
 The provider addresses are a verified snapshot from
 [GeoHide's server metadata](https://dns.geohide.ru/static/metadata/servers.json),
@@ -76,3 +79,5 @@ node --test linux-features/geohide-dns/test.js
 Tests cover provider addresses, isolated NSS configuration, fail-closed input,
 resource staging, argument forwarding, cleanup, and unchanged system files.
 Actual namespace and provider connectivity acceptance runs separately in CI.
+CI also starts the real desktop under Xvfb and requires a visible window and
+a live Electron renderer without disabling Chromium sandboxing.

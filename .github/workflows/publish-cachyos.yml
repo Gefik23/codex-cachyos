@@ -7,7 +7,7 @@ permissions:
   contents: write
 
 concurrency:
-  group: publish-cachyos-v26.1007.21434-3
+  group: publish-cachyos-v26.1007.21434-4
   cancel-in-progress: false
 
 jobs:
@@ -15,20 +15,20 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     env:
-      RELEASE_TAG: v26.1007.21434-3
+      RELEASE_TAG: v26.1007.21434-4
       UPSTREAM_VERSION: 26.1007.21434
-      PACMAN_PACKAGE_RELEASE: '3'
+      PACMAN_PACKAGE_RELEASE: '4'
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
         with:
-          ref: v26.1007.21434-3
+          ref: v26.1007.21434-4
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
         with:
           node-version: 24
       - name: Install verified distribution build tools
         run: |
           sudo apt-get update
-          sudo apt-get install -y --no-install-recommends makepkg pacman-package-manager fakeroot libarchive-tools gnupg gpgv dpkg-dev gettext-base zstd python3 make gcc g++ pkg-config unzip xz-utils bubblewrap
+          sudo apt-get install -y --no-install-recommends makepkg pacman-package-manager fakeroot libarchive-tools gnupg gpgv dpkg-dev gettext-base zstd python3 make gcc g++ pkg-config unzip xz-utils bubblewrap xvfb xauth xdotool dbus-x11 libgtk-3-0 libnss3 libgbm1 libasound2t64 libnotify4 libxss1 libxtst6
       - name: Prepare disk-backed scratch space
         run: |
           echo "XDG_CACHE_HOME=$HOME/c" >> "$GITHUB_ENV"
@@ -91,11 +91,24 @@ jobs:
           }
           cat "$RUNNER_TEMP/geohide-check.log"
           test "$before" = "$(sha256sum /etc/resolv.conf /etc/nsswitch.conf)"
+      - name: Accept the real GeoHide desktop window and sandboxed renderer
+        run: |
+          xvfb-run -a dbus-run-session -- python3 linux-features/geohide-dns/ci-smoke.py "$PWD/codex-app/.codex-linux/features/geohide-dns/launch.sh" > "$RUNNER_TEMP/geohide-desktop-check.log" 2>&1 || {
+            result=$?
+            cat "$RUNNER_TEMP/geohide-desktop-check.log"
+            python3 - <<'PY'
+          import os, pathlib
+          text = (pathlib.Path(os.environ['RUNNER_TEMP']) / 'geohide-desktop-check.log').read_text()[-3500:]
+          print('::error title=GeoHide desktop startup failed::' + text.replace('%', '%25').replace('\n', '%0A'))
+          PY
+            exit "$result"
+          }
+          cat "$RUNNER_TEMP/geohide-desktop-check.log"
       - name: Prepare and verify release assets
         run: |
           mkdir -p release-assets
           cp "dist/codex-desktop-${UPSTREAM_VERSION}-${PACMAN_PACKAGE_RELEASE}-x86_64.pkg.tar.zst" release-assets/
-          tar -czf release-assets/codex-cachyos-source.tar.gz --transform='s,^,codex-cachyos/,' --exclude='.git' --exclude='codex-app' --exclude='dist' --exclude='dist-next' --exclude='release-assets' --exclude='target' --exclude='node_modules' --exclude='reports' --exclude='.codex' --exclude='.codex-app.*' .
+          tar -czf release-assets/codex-cachyos-source.tar.gz --transform='s,^,codex-cachyos/,' --exclude='.git' --exclude='codex-app' --exclude='dist' --exclude='dist-next' --exclude='release-assets' --exclude='target' --exclude='node_modules' --exclude='reports' --exclude='.codex' --exclude='.codex-app.*' --exclude='__pycache__' .
           python3 - <<'PY'
           import hashlib, json, os, pathlib, subprocess, tarfile
           root = pathlib.Path.cwd()
@@ -151,8 +164,9 @@ jobs:
               'sourceArchiveSha256': digest(source), 'unchangedUpstreamFiles': matched,
               'requiredCorePatch': 'quit-confirmation-focus', 'enabledOptionalFeatures': ['geohide-dns'],
               'signatureChain': 'Pinned OpenPGP key -> InRelease -> Packages SHA256 -> upstream .deb SHA256',
-              'upstreamRepository': metadata['repository'], 'publicationCommit': commit, 'testsPassed': 65,
+              'upstreamRepository': metadata['repository'], 'publicationCommit': commit, 'testsPassed': 66,
               'privateDnsAndTlsVerifiedOnRunner': True, 'systemDnsFilesUnchanged': True,
+              'runtimeDeviceAccessVerified': True, 'desktopWindowAndRendererVerifiedOnXvfb': True,
               'graphicalLoginVerified': False, 'cachyOSInstallationVerified': False,
               'buildPlatform': 'GitHub Actions ubuntu-24.04', 'workflowRun': os.environ['GITHUB_RUN_ID']}
           (assets / 'codex-cachyos-verification.json').write_text(json.dumps(report, indent=2) + '\n')
