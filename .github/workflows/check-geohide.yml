@@ -1,0 +1,31 @@
+name: Check GeoHide provider documentation
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  documentation:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 3
+    steps:
+      - name: Fetch provider documentation with verified TLS
+        run: |
+          curl --fail --silent --show-error --location --max-time 30 https://dns.geohide.ru/ -o "$RUNNER_TEMP/geohide.html"
+          python3 - <<'PY'
+          import os, pathlib, re
+          from html.parser import HTMLParser
+          class Page(HTMLParser):
+              def __init__(self):
+                  super().__init__(); self.text = []
+              def handle_data(self, data):
+                  if data.strip(): self.text.append(data.strip())
+          raw = (pathlib.Path(os.environ['RUNNER_TEMP']) / 'geohide.html').read_text()
+          page = Page(); page.feed(raw)
+          lines = '\n'.join(page.text)
+          print(lines)
+          for i in range(0, len(lines), 3000):
+              chunk = lines[i:i+3000].replace('%', '%25').replace('\r', '%0D').replace('\n', '%0A')
+              print(f'::notice title=GeoHide documentation {i//3000 + 1}::{chunk}')
+          links = sorted(set(re.findall(r'(?:https?://[^\s\"<>]+|[\w.-]+/dns-query)', raw)))
+          print('::notice title=GeoHide endpoints::' + '\n'.join(links)[:3000].replace('%', '%25').replace('\n', '%0A'))
+          PY
