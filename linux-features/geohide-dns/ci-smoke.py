@@ -7,27 +7,39 @@ import sys
 import time
 
 
-def desktop_processes(executable):
-    browsers, renderers = [], []
+def desktop_processes(root_pid):
+    processes = {}
     for entry in Path("/proc").iterdir():
         if not entry.name.isdecimal():
             continue
         try:
-            # Sandboxed renderers can be non-dumpable: /proc/PID/exe is then
-            # unreadable by the parent even with the same UID. cmdline remains
-            # readable; match only the exact executable used by this CI app.
+            status = (entry / "status").read_text()
+            parent = int(next(line.split()[1] for line in status.splitlines() if line.startswith("PPid:")))
             arguments = (entry / "cmdline").read_bytes().split(b"\0")
-            if not arguments or os.fsdecode(arguments[0]) != str(executable):
-                continue
-            if b"--no-sandbox" in arguments:
-                raise RuntimeError("Desktop disabled Chromium sandboxing")
-            if b"--type=renderer" in arguments:
-                renderers.append(int(entry.name))
-            elif not any(argument.startswith(b"--type=") for argument in arguments):
-                browsers.append(int(entry.name))
-        except OSError:
+            processes[int(entry.name)] = (parent, arguments, (entry / "comm").read_text().strip())
+        except (OSError, ValueError, StopIteration):
             continue
-    return browsers, renderers
+    # Electron can rewrite argv[0] to the app title. Identify this launch by
+    # ancestry, independent of process title or ptrace-protected exe links.
+    descendants = {root_pid}
+    while True:
+        expanded = descendants | {pid for pid, (parent, _, _) in processes.items() if parent in descendants}
+        if expanded == descendants:
+            break
+        descendants = expanded
+    browsers, renderers, labels = [], [], []
+    for pid in sorted(descendants):
+        if pid not in processes:
+            continue
+        _, arguments, label = processes[pid]
+        labels.append({"pid": pid, "name": label})
+        if b"--no-sandbox" in arguments:
+            raise RuntimeError("Desktop disabled Chromium sandboxing")
+        if b"--type=renderer" in b"\0".join(arguments):
+            renderers.append(pid)
+        else:
+            browsers.append(pid)
+    return browsers, renderers, labels
 
 
 def main():
@@ -40,7 +52,6 @@ def main():
                XDG_STATE_HOME=str(profile / "state"),
                CODEX_LINUX_DISABLE_USAGE_REPORTING="1", CODEX_OZONE_PLATFORM="x11")
     log = profile / "desktop.log"
-    executable = (app / "ChatGPT").resolve()
     with log.open("wb") as output:
         process = subprocess.Popen([str(launcher), "--region", "eu",
                                     "--user-data-dir=" + str(profile / "electron")],
@@ -52,14 +63,14 @@ def main():
             while time.monotonic() < deadline:
                 if process.poll() is not None:
                     raise RuntimeError(f"Desktop exited early: {process.returncode}")
-                browsers, renderers = desktop_processes(executable)
+                browsers, renderers, labels = desktop_processes(process.pid)
                 visible = []
                 for pid in browsers:
                     windows = subprocess.run(["xdotool", "search", "--onlyvisible", "--pid", str(pid)],
                                              capture_output=True, timeout=3)
                     if windows.returncode == 0:
                         visible.extend(windows.stdout.decode().split())
-                observation = {"browserPids": browsers, "rendererPids": renderers, "visibleWindows": visible}
+                observation = {"browserPids": browsers, "rendererPids": renderers, "visibleWindows": visible, "processNames": labels}
                 ready = bool(visible and renderers)
                 if ready:
                     if ready_since is None:
