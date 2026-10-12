@@ -4,20 +4,25 @@ set -euo pipefail
 repo_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 usage() {
     cat <<'HELP'
-Usage: bash scripts/build-cachyos.sh [--check]
+Usage: bash scripts/build-cachyos.sh [--check] [--geohide]
 
 Build a manual-update codex-desktop pacman package for CachyOS/Arch Linux.
 --check verifies the host and build tools without downloading or installing.
 The default builds dist/codex-desktop-latest.pkg.tar.zst; it does not install it.
+--geohide includes the separate codex-desktop-geohide DNS launcher.
 HELP
 }
 
-case "${1:-}" in
-    --help|-h) usage; exit 0 ;;
-    --check|"") ;;
-    *) usage >&2; exit 2 ;;
-esac
-[ "$#" -le 1 ] || { usage >&2; exit 2; }
+check_only=0
+geohide=0
+for option in "$@"; do
+    case "$option" in
+        --help|-h) usage; exit 0 ;;
+        --check) check_only=1 ;;
+        --geohide) geohide=1 ;;
+        *) usage >&2; exit 2 ;;
+    esac
+done
 fail() { printf '[cachyos][ERROR] %s\n' "$*" >&2; exit 1; }
 
 # Use the actual host: a distro override must not turn a Debian machine into Arch.
@@ -42,7 +47,7 @@ if [ "${#missing[@]}" -gt 0 ]; then
 fi
 node -e 'const [major, minor] = process.versions.node.split(".").map(Number); if (major < 22 || (major === 22 && minor < 12)) process.exit(1)' || fail 'Node.js 22.12 or newer is required for ASAR tooling.'
 printf '[cachyos] Host and build tools passed.\n'
-[ "${1:-}" != '--check' ] || exit 0
+[ "$check_only" -eq 0 ] || exit 0
 
 # This entrypoint always resolves the signed official stable repository.
 [ -z "${UPSTREAM_DEB:-}" ] || fail 'UPSTREAM_DEB is unsupported here; use the signed online source.'
@@ -57,6 +62,12 @@ esac
 export CODEX_LINUX_FEATURES_CONFIG="$repo_dir/linux-features/features.example.json"
 export TMPDIR="${XDG_CACHE_HOME:-$HOME/.cache}/codex-desktop-dev/tmp"
 mkdir -p "$TMPDIR"
+if [ "$geohide" -eq 1 ]; then
+    feature_config="$(mktemp "$TMPDIR/geohide-features.XXXXXXXX.json")"
+    trap 'rm -f -- "$feature_config"' EXIT
+    printf '{"enabled":["geohide-dns"]}\n' > "$feature_config"
+    export CODEX_LINUX_FEATURES_CONFIG="$feature_config"
+fi
 cd "$repo_dir"
 make build-app
 PACKAGE_VERSION="$(node -e 'const fs = require("node:fs"); const info = JSON.parse(fs.readFileSync("codex-app/.codex-linux/build-info.json", "utf8")); const version = info.upstreamLinuxPackage.version; if (!/^\d[0-9A-Za-z.+:~-]*$/.test(version)) throw new Error("Missing or invalid upstream version"); console.log(version.replace(/[:-]/g, "."));')"

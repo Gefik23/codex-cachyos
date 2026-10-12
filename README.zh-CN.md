@@ -1,5 +1,11 @@
 <h1 align="center">ChatGPT Community for Linux</h1>
 
+CachyOS/Arch 的 GeoHide 可选版本使用 `bash scripts/build-cachyos.sh --geohide`
+构建。安装后运行 `codex-desktop-geohide --check` 检查，再用
+`codex-desktop-geohide` 启动。它为应用及子进程提供私有的 53 端口 DNS，
+不会修改系统 DNS；需要 bubblewrap 和 Python。
+详见 [GeoHide DNS](linux-features/geohide-dns/README.md)。
+
 <p align="center">
   <a href="https://github.com/ilysenko/codex-desktop-linux/actions/workflows/ci.yml"><img src="https://github.com/ilysenko/codex-desktop-linux/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
   <a href="https://github.com/ilysenko/codex-desktop-linux/actions/workflows/upstream-build-app.yml"><img src="https://github.com/ilysenko/codex-desktop-linux/actions/workflows/upstream-build-app.yml/badge.svg" alt="官方 Linux 软件包构建"></a>

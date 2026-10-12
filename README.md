@@ -10,6 +10,11 @@ For the packaged x86_64 build, open this repository's
 [Releases](https://github.com/Gefik23/codex-cachyos/releases). Download the
 `.pkg.tar.zst` asset, then run `sudo pacman -U ./codex-desktop-26.1007.21434-1-x86_64.pkg.tar.zst`
 and `codex-desktop`. The desktop menu name is **ChatGPT Community**.
+GeoHide-enabled packages also provide `codex-desktop-geohide` and a separate
+menu entry. Use `codex-desktop-geohide --check` before launching. It uses private
+port-53 DNS for the desktop and child processes, with no system DNS edits;
+see [GeoHide DNS](linux-features/geohide-dns/README.md). Build this variant with
+`bash scripts/build-cachyos.sh --geohide`.
 See the [Russian CachyOS guide](docs/CACHYOS.md) for building, Wayland, and
 validation limits. Graphical login and a real CachyOS installation remain unverified.
 

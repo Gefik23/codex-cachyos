@@ -48,7 +48,8 @@ map_arch() {
 # app version.
 pacman_version_parts() {
 	PACMAN_PKGVER="$PACKAGE_VERSION"
-	PACMAN_PKGREL="1"
+	PACMAN_PKGREL="${PACMAN_PACKAGE_RELEASE:-1}"
+	[[ "$PACMAN_PKGREL" =~ ^[1-9][0-9]*$ ]] || error 'PACMAN_PACKAGE_RELEASE must be a positive integer'
 }
 
 write_threaded_makepkg_config() {

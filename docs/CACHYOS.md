@@ -43,6 +43,32 @@ codex-desktop
 как pacman-дистрибутив даже без `ID_LIKE=arch` в `/etc/os-release`.
 Стандартные зависимости графического runtime устанавливает pacman из пакета.
 
+## GeoHide только для Codex
+
+Вариант с GeoHide собирается командой `bash scripts/build-cachyos.sh --geohide`.
+В готовом пакете есть команда `codex-desktop-geohide` и пункт меню
+**ChatGPT Community (GeoHide DNS)**. Перед переключением закрой обычное окно
+приложения, иначе upstream перенаправит запуск в уже работающий процесс.
+
+```bash
+codex-desktop-geohide --check
+codex-desktop-geohide
+# Другой регион:
+codex-desktop-geohide --region eu
+```
+
+По умолчанию используются серверы RU с [сайта GeoHide](https://dns.geohide.ru/).
+Регион можно выбрать через `--region ru|eu|us` или `CODEX_GEOHIDE_REGION`.
+Настройка действует в отдельном пространстве приложения и его дочерних
+процессов, включая встроенный Codex. `/etc/resolv.conf` и системный DNS не
+перезаписываются. Обычная команда `codex-desktop` запускает приложение без
+этой настройки. Внешний браузер авторизации продолжает использовать DNS системы.
+
+Пакет устанавливает зависимости `bubblewrap` и `python`. Нужны пользовательские
+пространства имён ядра и доступ к DNS-порту 53; шифрованный DoH этим запуском
+не используется. Проверка `--check` проверяет DNS и сертификат `chatgpt.com`,
+но не авторизацию OpenAI. [Подробности и ограничения](../linux-features/geohide-dns/README.md).
+
 ## KDE / Wayland
 
 Launcher upstream выбирает графический backend по сеансу. Если на конкретном

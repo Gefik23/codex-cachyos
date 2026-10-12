@@ -7,7 +7,7 @@ permissions:
   contents: write
 
 concurrency:
-  group: publish-cachyos-v26.1007.21434-1
+  group: publish-cachyos-v26.1007.21434-2
   cancel-in-progress: false
 
 jobs:
@@ -15,19 +15,20 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     env:
-      RELEASE_TAG: v26.1007.21434-1
+      RELEASE_TAG: v26.1007.21434-2
       UPSTREAM_VERSION: 26.1007.21434
+      PACMAN_PACKAGE_RELEASE: '2'
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
         with:
-          ref: v26.1007.21434-1
+          ref: v26.1007.21434-2
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
         with:
           node-version: 24
       - name: Install verified distribution build tools
         run: |
           sudo apt-get update
-          sudo apt-get install -y --no-install-recommends makepkg pacman-package-manager fakeroot libarchive-tools gnupg gpgv dpkg-dev gettext-base zstd python3 make gcc g++ pkg-config unzip xz-utils
+          sudo apt-get install -y --no-install-recommends makepkg pacman-package-manager fakeroot libarchive-tools gnupg gpgv dpkg-dev gettext-base zstd python3 make gcc g++ pkg-config unzip xz-utils bubblewrap
       - name: Prepare disk-backed scratch space
         run: |
           echo "XDG_CACHE_HOME=$HOME/c" >> "$GITHUB_ENV"
@@ -35,9 +36,10 @@ jobs:
           mkdir -p "$HOME/c/codex-desktop-dev/tmp"
       - name: Validate source and existing tests
         run: |
+          unset PACMAN_PACKAGE_RELEASE
           trap 'status=$?; echo "::error title=Test runner command failed::Exit $status while running: $BASH_COMMAND"; exit "$status"' ERR
-          bash -n scripts/build-cachyos.sh scripts/build-pacman.sh scripts/lib/linux-target-detect.sh
-          if node --test scripts/lib/cachyos.test.js scripts/lib/package-common.test.js scripts/lib/linux-features.test.js scripts/lib/upstream-linux-package.test.js scripts/patch-linux-window-ui.test.js > "$RUNNER_TEMP/cachyos-tests.log" 2>&1; then
+          bash -n scripts/build-cachyos.sh scripts/build-pacman.sh scripts/lib/linux-target-detect.sh linux-features/geohide-dns/launch.sh linux-features/geohide-dns/command.sh
+          if node --test scripts/lib/cachyos.test.js scripts/lib/package-common.test.js scripts/lib/linux-features.test.js scripts/lib/upstream-linux-package.test.js scripts/patch-linux-window-ui.test.js linux-features/geohide-dns/test.js > "$RUNNER_TEMP/cachyos-tests.log" 2>&1; then
             cat "$RUNNER_TEMP/cachyos-tests.log"
           else
             result=$?
@@ -57,15 +59,31 @@ jobs:
         run: |
           node scripts/lib/upstream-linux-package.js --output-dir "$RUNNER_TEMP/codex-source" --metadata "$RUNNER_TEMP/codex-source/verified-package.json" --key-base64 assets/openai-codex-linux-repository-key.gpg.base64
           node -e 'const fs=require("fs"); const m=JSON.parse(fs.readFileSync(process.env.RUNNER_TEMP+"/codex-source/verified-package.json")); if(m.version!==process.env.UPSTREAM_VERSION) throw new Error("The signed stable release changed; rebuild must be reviewed before publishing");'
+          printf '{"enabled":["geohide-dns"]}\n' > linux-features/features.json
           ./install.sh "$RUNNER_TEMP/codex-source/chatgpt_${UPSTREAM_VERSION}_amd64.deb"
           PACKAGE_VERSION="$UPSTREAM_VERSION" make pacman
           ./codex-app/resources/codex --version
           ./codex-app/resources/rg --version
           ./codex-app/start.sh --diagnose
+      - name: Accept private DNS namespace on the runner
+        run: |
+          before="$(sha256sum /etc/resolv.conf /etc/nsswitch.conf)"
+          ./codex-app/.codex-linux/features/geohide-dns/launch.sh --region eu --check > "$RUNNER_TEMP/geohide-check.log" 2>&1 || {
+            result=$?
+            cat "$RUNNER_TEMP/geohide-check.log"
+            python3 - <<'PY'
+          import os, pathlib
+          text = (pathlib.Path(os.environ['RUNNER_TEMP']) / 'geohide-check.log').read_text()[-3500:]
+          print('::error title=Private GeoHide DNS failed::' + text.replace('%', '%25').replace('\n', '%0A'))
+          PY
+            exit "$result"
+          }
+          cat "$RUNNER_TEMP/geohide-check.log"
+          test "$before" = "$(sha256sum /etc/resolv.conf /etc/nsswitch.conf)"
       - name: Prepare and verify release assets
         run: |
           mkdir -p release-assets
-          cp "dist/codex-desktop-${UPSTREAM_VERSION}-1-x86_64.pkg.tar.zst" release-assets/
+          cp "dist/codex-desktop-${UPSTREAM_VERSION}-${PACMAN_PACKAGE_RELEASE}-x86_64.pkg.tar.zst" release-assets/
           tar -czf release-assets/codex-cachyos-source.tar.gz --transform='s,^,codex-cachyos/,' --exclude='.git' --exclude='codex-app' --exclude='dist' --exclude='dist-next' --exclude='release-assets' --exclude='target' --exclude='node_modules' --exclude='reports' --exclude='.codex' --exclude='.codex-app.*' .
           python3 - <<'PY'
           import hashlib, json, os, pathlib, subprocess, tarfile
@@ -73,7 +91,7 @@ jobs:
           assets = root / 'release-assets'
           metadata = json.loads((pathlib.Path(os.environ['RUNNER_TEMP']) / 'codex-source/verified-package.json').read_text())
           deb = pathlib.Path(metadata['path'])
-          package = assets / f"codex-desktop-{metadata['version']}-1-x86_64.pkg.tar.zst"
+          package = assets / f"codex-desktop-{metadata['version']}-{os.environ['PACMAN_PACKAGE_RELEASE']}-x86_64.pkg.tar.zst"
           assert hashlib.file_digest(deb.open('rb'), 'sha256').hexdigest() == metadata['sha256']
           def manifest(command, prefix):
               process = subprocess.Popen(command, stdout=subprocess.PIPE)
@@ -87,7 +105,7 @@ jobs:
                       stream = archive.extractfile(member)
                       if name.startswith(prefix):
                           hashes[name[len(prefix):]] = hashlib.file_digest(stream, 'sha256').hexdigest()
-                      elif name in ['.PKGINFO', 'usr/share/applications/codex-desktop.desktop']:
+                      elif name in ['.PKGINFO', 'usr/share/applications/codex-desktop.desktop', 'usr/bin/codex-desktop-geohide', 'usr/share/applications/codex-desktop-geohide.desktop']:
                           small[name] = stream.read().decode()
               assert process.wait() == 0
               return hashes, small, owners
@@ -102,24 +120,28 @@ jobs:
               matched += 1
           assert owners == {0}
           assert 'pkgname = codex-desktop\n' in small['.PKGINFO']
-          assert f"pkgver = {metadata['version']}-1\n" in small['.PKGINFO']
+          assert f"pkgver = {metadata['version']}-{os.environ['PACMAN_PACKAGE_RELEASE']}\n" in small['.PKGINFO']
           assert 'arch = x86_64\n' in small['.PKGINFO']
           assert 'Name=ChatGPT Community\n' in small['usr/share/applications/codex-desktop.desktop']
+          assert 'depend = bubblewrap\n' in small['.PKGINFO'] and 'depend = python\n' in small['.PKGINFO']
+          assert '/opt/codex-desktop/.codex-linux/features/geohide-dns/launch.sh' in small['usr/bin/codex-desktop-geohide']
+          assert 'Name=ChatGPT Community (GeoHide DNS)\n' in small['usr/share/applications/codex-desktop-geohide.desktop']
           assert not any('codex-update-manager' in name for name in built)
           patch = json.loads((root / 'codex-app/.codex-linux/patch-report.json').read_text())
           assert patch['upstreamAppAsar']['sha256'] == original['resources/app.asar']
           assert patch['outputAppAsar']['sha256'] == built['resources/app.asar']
           assert [(p['name'], p['status']) for p in patch['patches']] == [('quit-confirmation-focus', 'applied')]
-          assert patch['enabledFeatures'] == []
+          assert patch['enabledFeatures'] == ['geohide-dns']
           source = assets / 'codex-cachyos-source.tar.gz'
           commit = subprocess.check_output(['git', 'rev-parse', 'HEAD'], text=True).strip()
           digest = lambda path: hashlib.file_digest(path.open('rb'), 'sha256').hexdigest()
           report = {'package': package.name, 'upstreamVersion': metadata['version'], 'architecture': 'x86_64',
               'upstreamDebSha256': metadata['sha256'], 'packageSha256': digest(package),
               'sourceArchiveSha256': digest(source), 'unchangedUpstreamFiles': matched,
-              'requiredCorePatch': 'quit-confirmation-focus', 'enabledOptionalFeatures': [],
+              'requiredCorePatch': 'quit-confirmation-focus', 'enabledOptionalFeatures': ['geohide-dns'],
               'signatureChain': 'Pinned OpenPGP key -> InRelease -> Packages SHA256 -> upstream .deb SHA256',
-              'upstreamRepository': metadata['repository'], 'publicationCommit': commit, 'testsPassed': 61,
+              'upstreamRepository': metadata['repository'], 'publicationCommit': commit, 'testsPassed': 65,
+              'privateDnsAndTlsVerifiedOnRunner': True, 'systemDnsFilesUnchanged': True,
               'graphicalLoginVerified': False, 'cachyOSInstallationVerified': False,
               'buildPlatform': 'GitHub Actions ubuntu-24.04', 'workflowRun': os.environ['GITHUB_RUN_ID']}
           (assets / 'codex-cachyos-verification.json').write_text(json.dumps(report, indent=2) + '\n')

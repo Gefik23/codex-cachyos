@@ -1,0 +1,16 @@
+{
+  "id": "geohide-dns",
+  "title": "GeoHide DNS launcher for CachyOS",
+  "description": "Adds a separate launcher with private GeoHide DNS for the desktop and its child processes. System DNS is unchanged.",
+  "defaultEnabled": false,
+  "resources": [
+    { "source": "launch.sh", "target": ".codex-linux/features/geohide-dns/launch.sh", "mode": "0755" },
+    { "source": "run.py", "target": ".codex-linux/features/geohide-dns/run.py", "mode": "0644" },
+    { "source": "servers.json", "target": ".codex-linux/features/geohide-dns/servers.json", "mode": "0644" }
+  ],
+  "packageDependencies": { "pacman": ["bubblewrap", "python"] },
+  "packageResources": [
+    { "source": "command.sh", "target": "usr/bin/codex-desktop-geohide", "mode": "0755", "formats": ["pacman"] },
+    { "source": "geohide.desktop", "target": "usr/share/applications/codex-desktop-geohide.desktop", "mode": "0644", "formats": ["pacman"] }
+  ]
+}

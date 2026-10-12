@@ -20,6 +20,8 @@ building packages, then list the feature ids you want:
 ```
 
 `features.json` is ignored by git so local choices do not leak into commits.
+For CachyOS/Arch, [`geohide-dns`](geohide-dns/README.md) adds a separate launcher
+using private GeoHide DNS for the desktop and its child processes.
 Feature choices are read during the install/build pipeline; if you change this
 file after an app has already been generated, rerun the install/build step.
 Native packages preserve the enabled feature id list and settings in the

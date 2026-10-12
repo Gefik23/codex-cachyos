@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=ChatGPT Community (GeoHide DNS)
+Comment=Launch Codex with private GeoHide DNS
+Exec=codex-desktop-geohide %U
+Icon=codex-desktop
+Terminal=false
+Categories=Development;
+StartupWMClass=codex-desktop
