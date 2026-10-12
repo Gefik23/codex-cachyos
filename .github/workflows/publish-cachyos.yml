@@ -37,6 +37,7 @@ jobs:
           mkdir -p "$HOME/c/codex-desktop-dev/tmp"
       - name: Validate source and existing tests
         run: |
+          trap 'status=$?; echo "::error title=Test runner command failed::Exit $status while running: $BASH_COMMAND"; exit "$status"' ERR
           bash -n scripts/build-cachyos.sh scripts/build-pacman.sh scripts/lib/linux-target-detect.sh
           if node --test scripts/lib/cachyos.test.js scripts/lib/package-common.test.js scripts/lib/linux-features.test.js scripts/lib/upstream-linux-package.test.js scripts/patch-linux-window-ui.test.js > "$RUNNER_TEMP/cachyos-tests.log" 2>&1; then
             cat "$RUNNER_TEMP/cachyos-tests.log"
@@ -46,14 +47,8 @@ jobs:
             python3 - <<'PY'
           import os, pathlib
           lines = (pathlib.Path(os.environ['RUNNER_TEMP']) / 'cachyos-tests.log').read_text().splitlines()
-          count = 0
-          for i, line in enumerate(lines):
-              if 'not ok' in line or 'Error:' in line or 'error:' in line:
-                  message = '\n'.join(lines[i:i+18]).replace('%', '%25').replace('\r', '%0D').replace('\n', '%0A')
-                  print('::error title=Codex test failure::' + message)
-                  count += 1
-                  if count == 5:
-                      break
+          message = '\n'.join(lines[-120:])[-20000:].replace('%', '%25').replace('\r', '%0D').replace('\n', '%0A')
+          print('::error title=Codex test failure::' + message)
           PY
             exit "$result"
           fi
