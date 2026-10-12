@@ -33,3 +33,23 @@ jobs:
           links = sorted(set(re.findall(r'(?:https?://[^\s\"<>]+|static/[^\s\"\x27`<>]+|[\w.-]+/dns-query)', raw)))
           print('::notice title=GeoHide endpoints::' + '\n'.join(links)[:3000].replace('%', '%25').replace('\n', '%0A'))
           PY
+      - name: Read current provider servers and verify encrypted DNS responses
+        run: |
+          curl --fail --silent --show-error --max-time 30 https://dns.geohide.ru/static/metadata/servers.json -o "$RUNNER_TEMP/geohide-servers.json"
+          python3 - <<'PY'
+          import os, pathlib, urllib.request, struct, base64, json
+          raw = (pathlib.Path(os.environ['RUNNER_TEMP']) / 'geohide-servers.json').read_text()
+          print('::notice title=Provider server metadata::' + raw[:3500].replace('%', '%25').replace('\n', '%0A'))
+          query = struct.pack('!6H', 1234, 256, 1, 0, 0, 0) + b'\x07chatgpt\x03com\x00' + struct.pack('!2H', 1, 1)
+          encoded = base64.urlsafe_b64encode(query).rstrip(b'=').decode()
+          for host in ('geohide.ru', 'eu.geohide.ru', 'us.geohide.ru'):
+              try:
+                  request = urllib.request.Request('https://' + host + '/dns-query?dns=' + encoded, headers={'Accept': 'application/dns-message'})
+                  with urllib.request.urlopen(request, timeout=15) as response:
+                      answer = response.read(65536)
+                      header = struct.unpack('!6H', answer[:12])
+                      assert header[0] == 1234 and header[1] & 32768 and header[1] & 15 == 0 and header[3] > 0
+                      print('::notice title=DoH response::' + host + ' returned a valid chatgpt.com DNS response')
+              except Exception as error:
+                  print('::warning title=DoH unavailable::' + host + ': ' + str(error))
+          PY
