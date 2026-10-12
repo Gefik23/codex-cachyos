@@ -7,18 +7,27 @@ import sys
 import time
 
 
-def has_renderer(executable):
+def desktop_processes(executable):
+    browsers, renderers = [], []
     for entry in Path("/proc").iterdir():
         if not entry.name.isdecimal():
             continue
         try:
-            if (entry / "exe").resolve() != executable:
+            # Sandboxed renderers can be non-dumpable: /proc/PID/exe is then
+            # unreadable by the parent even with the same UID. cmdline remains
+            # readable; match only the exact executable used by this CI app.
+            arguments = (entry / "cmdline").read_bytes().split(b"\0")
+            if not arguments or os.fsdecode(arguments[0]) != str(executable):
                 continue
-            if b"--type=renderer" in (entry / "cmdline").read_bytes().split(b"\0"):
-                return True
+            if b"--no-sandbox" in arguments:
+                raise RuntimeError("Desktop disabled Chromium sandboxing")
+            if b"--type=renderer" in arguments:
+                renderers.append(int(entry.name))
+            elif not any(argument.startswith(b"--type=") for argument in arguments):
+                browsers.append(int(entry.name))
         except OSError:
             continue
-    return False
+    return browsers, renderers
 
 
 def main():
@@ -39,12 +48,19 @@ def main():
         try:
             deadline = time.monotonic() + 45
             ready_since = None
+            observation = None
             while time.monotonic() < deadline:
                 if process.poll() is not None:
                     raise RuntimeError(f"Desktop exited early: {process.returncode}")
-                windows = subprocess.run(["xdotool", "search", "--onlyvisible", "--class", "codex-desktop"],
-                                         capture_output=True, timeout=3)
-                ready = windows.returncode == 0 and windows.stdout.strip() and has_renderer(executable)
+                browsers, renderers = desktop_processes(executable)
+                visible = []
+                for pid in browsers:
+                    windows = subprocess.run(["xdotool", "search", "--onlyvisible", "--pid", str(pid)],
+                                             capture_output=True, timeout=3)
+                    if windows.returncode == 0:
+                        visible.extend(windows.stdout.decode().split())
+                observation = {"browserPids": browsers, "rendererPids": renderers, "visibleWindows": visible}
+                ready = bool(visible and renderers)
                 if ready:
                     if ready_since is None:
                         ready_since = time.monotonic()
@@ -55,7 +71,7 @@ def main():
                     ready_since = None
                 time.sleep(1)
             else:
-                raise RuntimeError("No stable visible desktop window and renderer within 45 seconds")
+                raise RuntimeError(f"No stable visible desktop window and renderer within 45 seconds: {observation}")
             if b"FATAL:" in log.read_bytes() or b"Failed to open /dev/null" in log.read_bytes():
                 raise RuntimeError("Desktop log contains a fatal runtime error")
         except Exception:
